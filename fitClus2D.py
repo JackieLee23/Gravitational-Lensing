@@ -2,13 +2,22 @@
 
 import numpy as np
 from scipy.optimize import minimize
+import numdifftools as nd
+import pickle
+import emcee
 import matplotlib.pyplot as plt
+import corner
+from multiprocessing import Pool
+import os
 
+os.environ["OMP_NUM_THREADS"] = "1"
 testmode = False
 
 ######################################################################
 # class to hold image data
 ######################################################################
+
+
 
 class imgclass:
 
@@ -183,16 +192,16 @@ class galclass:
     mod  = []      # model [etab,sigb,etaa,siga]
 
     ##################################################################
-    # file should contain list of (x,y,magnitude)
+    # file should contain list of (x,y,magnitude, probability)
     # note: all that matters is *relative* magnitude compared to the
     # reference value m0
     ##################################################################
-    def __init__(self,data,logflags=[False,False],verbose=True):
-        self.dat      = np.array(data)
+    def __init__(self,filename,logflags=[False,False],verbose=True):
+        self.dat      = np.loadtxt(filename)
         self.ngal     = len(self.dat)
         self.ID       = ['pj1' for i in range(self.ngal)]
         self.logflags = logflags
-        if verbose: print('Read in ' + str(len(data)) + ' galaxies')
+        if verbose: print('Read galaxy data from file',filename)
 
     ##################################################################
     # store the scaling relations
@@ -770,7 +779,7 @@ class fitclass:
         for i,result in enumerate(self.sampler.sample(pstart,iterations=self.nburn)):
             if self.MCverb and i%1000==0: print('emcee: step',i)
             if self.savesteps:
-                position = result[0]
+                position = result.coords
                 f = open(self.basename+'-burn-tmp.txt','a')
                 for k in range(position.shape[0]):
                     f.write('{0:4d}'.format(k))
@@ -795,7 +804,7 @@ class fitclass:
         for i,result in enumerate(self.sampler.sample(pos,iterations=self.nstep,rstate0=state)):
             if self.MCverb and i%1000==0: print('emcee: step',i)
             if self.savesteps==True:
-                position = result[0]
+                position = result.coords
                 f = open(self.basename+'-main-tmp.txt','a')
                 for k in range(position.shape[0]):
                     f.write('{0:4d}'.format(k))
@@ -810,13 +819,16 @@ class fitclass:
         if self.MCverb: print('emcee: done')
 
     ##################################################################
-    def MCplot(self,filename,labels=None,fmt='.2f',truths=None):
+    def MCplot(self,filename,labels=None,fmt='.2f',truths=None, reshapedchain = None):
         if self.sampler==None:
             print('Error: you must run MCMC before plotting')
             return
         if self.MCverb: print('emcee: corner plot',filename)
+
+            
         fig = corner.corner(self.sampler.chain.reshape((-1,self.ndim)),quantiles=[0.16,0.50,0.84],show_titles=True,title_fmt=fmt,labels=labels,truths=truths)
         fig.savefig(filename)
+
 
     ##################################################################
     def plot_Fisher(self,filename,color='blue',alpha=0.5,truths=[],linecolor='gray',nsamp=0,labels=[],fontsize=10):
@@ -872,6 +884,8 @@ class fitclass:
         f.tight_layout()
         f.savefig(filename,bbox_inches='tight')
         print('Fisher plot:',filename)
+
+
 
 
 
@@ -1086,4 +1100,9 @@ def Gam2minv(Garr):
 
 def dotABAT(A,B):
     return np.linalg.multi_dot((A,B,A.T))
+
+
+
+
+
 
